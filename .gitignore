@@ -4,6 +4,7 @@ wandb/
 models/uni_perceiver/work_dirs
 models/open_clip/logs
 models/swin_transformer/logs
+models/swin_transformer/train-output
 models/open_flamingo/logs
 features/
 results/
