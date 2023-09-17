@@ -962,6 +962,7 @@ class PipelineCLIP(nn.Module):
             rank=args.rank,
             world_size=args.world_size,
             use_horovod=args.horovod)
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
     
     def to_layers(self):
         """_summary_
@@ -980,5 +981,17 @@ class PipelineCLIP(nn.Module):
         ]
         print_rank_0(f'Split CLIP model into {len(layers)} layers.')
         return layers
-    
-        
+
+
+    def layers_forward_with_loss(self, images, texts):
+        # assert self.layers != None
+        x = self.visual.pre_transformer(images)
+        for layer in self.visual.get_layerwise_transforms():
+            x = layer(x)
+        image_out = self.visual.post_transformer(x)
+
+        (x, attn_mask, input_argmax) = self.text.pre_transformer(texts)
+        for layer in self.text.get_layerwise_transforms():
+            x, attn_mask  = layer((x, attn_mask))
+        text_out, _ = self.text.post_transformer((input_argmax, x))
+        return self.loss((image_out, text_out, self.logit_scale.exp()))

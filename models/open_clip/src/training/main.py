@@ -33,7 +33,7 @@ from training.distributed import is_master, init_distributed_device, broadcast_o
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
-from training.train import train_one_epoch, train_one_epoch_deepspeed, evaluate, train_one_epoch_deepspeed_pipeline
+from training.train import train_one_epoch, train_one_epoch_deepspeed, evaluate, train_one_epoch_deepspeed_pipeline, profile_train
 from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
 
 import deepspeed
@@ -407,71 +407,73 @@ def main(args):
         
     logging.info(f"The number of trainable parameters={count_parameters(model)}")
     
-    if args.enable_deepspeed and not args.enable_flexpipe:
-        # init deepspeed for data parallel
-        engine, _, _, _ = deepspeed.initialize(
-            args=args,
-            model=model,
-            model_parameters=[p for p in model.parameters() if p.requires_grad])
-    elif args.enable_flexpipe:
-        import networkx as nx
-        from deepspeed.pipe import PipelineBranchModule
-        g = nx.DiGraph(nx.nx_pydot.read_dot(f'/home/zanzong/workspace/open_clip/ds_configs/layerinfo_{args.model}.dot'))
+    # if args.enable_deepspeed and not args.enable_flexpipe:
+    #     # init deepspeed for data parallel
+    #     engine, _, _, _ = deepspeed.initialize(
+    #         args=args,
+    #         model=model,
+    #         model_parameters=[p for p in model.parameters() if p.requires_grad])
+    # elif args.enable_flexpipe:
+    #     import networkx as nx
+    #     from deepspeed.pipe import PipelineBranchModule
+    #     g = nx.DiGraph(nx.nx_pydot.read_dot(f'/home/zanzong/workspace/open_clip/ds_configs/layerinfo_{args.model}.dot'))
         
-        # use PipelineBranchModule will automatically choose BranchEngine
-        # ViT-B-32 split=[0, 11, 29]
-        model = PipelineBranchModule(layers=model.to_layers(), graph_info=g, see_baseline_perf=args.baseline_perf, \
-                                        is_constrastive_loss=True, partition_method=[0, 15, 53], num_stages=2)
+    #     # use PipelineBranchModule will automatically choose BranchEngine
+    #     # ViT-B-32 split=[0, 11, 29]
+    #     model = PipelineBranchModule(layers=model.to_layers(), graph_info=g, see_baseline_perf=args.baseline_perf, \
+    #                                     is_constrastive_loss=True, partition_method=[0, 15, 53], num_stages=2)
     
-        # init deepspeed
-        engine, _, _, _ = deepspeed.initialize(
-            args=args,
-            model=model,
-            model_parameters=[p for p in model.parameters() if p.requires_grad])
-        
-    for epoch in range(start_epoch, args.epochs):
-        if is_master(args):
-            logging.info(f'Start epoch {epoch}')
-        if args.enable_deepspeed and not args.enable_flexpipe:
-            train_one_epoch_deepspeed(engine, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
-        elif args.enable_flexpipe:
-            train_one_epoch_deepspeed_pipeline(engine, data, epoch, args)
-        else:
-            train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
-        completed_epoch = epoch + 1
+    #     # init deepspeed
+    #     engine, _, _, _ = deepspeed.initialize(
+    #         args=args,
+    #         model=model,
+    #         model_parameters=[p for p in model.parameters() if p.requires_grad])
+    
+    profile_train(model, data, loss, 1, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
 
-        if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
-            evaluate(model, data, completed_epoch, args, writer)
+    # for epoch in range(start_epoch, args.epochs):
+    #     # if is_master(args):
+    #     #     logging.info(f'Start epoch {epoch}')
+    #     # if args.enable_deepspeed and not args.enable_flexpipe:
+    #     #     train_one_epoch_deepspeed(engine, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
+    #     # elif args.enable_flexpipe:
+    #     #     train_one_epoch_deepspeed_pipeline(engine, data, epoch, args)
+    #     # else:
+    #     train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
+    #     completed_epoch = epoch + 1
 
-        # Saving checkpoints.
-        if args.save_logs:
-            checkpoint_dict = {
-                "epoch": completed_epoch,
-                "name": args.name,
-                "state_dict": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-            }
-            if scaler is not None:
-                checkpoint_dict["scaler"] = scaler.state_dict()
+    #     if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
+    #         evaluate(model, data, completed_epoch, args, writer)
 
-            if completed_epoch == args.epochs or (
-                args.save_frequency > 0 and (completed_epoch % args.save_frequency) == 0
-            ):
-                torch.save(
-                    checkpoint_dict,
-                    os.path.join(args.checkpoint_path, f"epoch_{completed_epoch}.pt"),
-                )
-            if args.delete_previous_checkpoint:
-                previous_checkpoint = os.path.join(args.checkpoint_path, f"epoch_{completed_epoch - 1}.pt")
-                if os.path.exists(previous_checkpoint):
-                    os.remove(previous_checkpoint)
+    #     # Saving checkpoints.
+    #     if args.save_logs:
+    #         checkpoint_dict = {
+    #             "epoch": completed_epoch,
+    #             "name": args.name,
+    #             "state_dict": model.state_dict(),
+    #             "optimizer": optimizer.state_dict(),
+    #         }
+    #         if scaler is not None:
+    #             checkpoint_dict["scaler"] = scaler.state_dict()
 
-            if args.save_most_recent:
-                # try not to corrupt the latest checkpoint if save fails
-                tmp_save_path = os.path.join(args.checkpoint_path, "tmp.pt")
-                latest_save_path = os.path.join(args.checkpoint_path, LATEST_CHECKPOINT_NAME)
-                torch.save(checkpoint_dict, tmp_save_path)
-                os.replace(tmp_save_path, latest_save_path)
+    #         if completed_epoch == args.epochs or (
+    #             args.save_frequency > 0 and (completed_epoch % args.save_frequency) == 0
+    #         ):
+    #             torch.save(
+    #                 checkpoint_dict,
+    #                 os.path.join(args.checkpoint_path, f"epoch_{completed_epoch}.pt"),
+    #             )
+    #         if args.delete_previous_checkpoint:
+    #             previous_checkpoint = os.path.join(args.checkpoint_path, f"epoch_{completed_epoch - 1}.pt")
+    #             if os.path.exists(previous_checkpoint):
+    #                 os.remove(previous_checkpoint)
+
+    #         if args.save_most_recent:
+    #             # try not to corrupt the latest checkpoint if save fails
+    #             tmp_save_path = os.path.join(args.checkpoint_path, "tmp.pt")
+    #             latest_save_path = os.path.join(args.checkpoint_path, LATEST_CHECKPOINT_NAME)
+    #             torch.save(checkpoint_dict, tmp_save_path)
+    #             os.replace(tmp_save_path, latest_save_path)
 
     if args.wandb and is_master(args):
         wandb.finish()

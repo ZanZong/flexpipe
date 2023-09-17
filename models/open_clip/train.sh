@@ -9,11 +9,10 @@ export LOCAL_RANK=$NODE_RANK
 export WORLD_SIZE=$(($NTASK_PER_NODE*$NNODE))
 export RANK=$SLURM_PROCID
 
-cd /home/zanzong/workspace/flexpipe/models/open_clip
+cd /home/chlience/flexpipe/models/open_clip
 export PYTHONPATH="$PYTHONPATH:$PWD/src"
 
 exec python -u src/training/main.py \
-    --deepspeed_config=ds_configs/ds_config.json \
     --save-frequency 1 \
     --train-data="/mnt/zoltan/zanzong/CC3M/cc3m/{00000..00331}.tar" \
     --train-num-samples 3000000 \
@@ -24,6 +23,6 @@ exec python -u src/training/main.py \
     --force-patch-dropout 0. \
     --gather-with-grad \
     --local-loss \
-    --enable-deepspeed \
     --enable-flexpipe \
-    --baseline-perf
+    --baseline-perf \
+    --batch-size 16

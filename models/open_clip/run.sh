@@ -8,7 +8,7 @@ set -x
 
 export NNODE=1
 export NODELIST="nico4"
-export NTASK_PER_NODE=2
+export NTASK_PER_NODE=1
 export PYTHONENV="/home/zanzong/workspace/deepspeed-env/bin/activate"
 export TIMESTAMP=$(date "+%Y-%m-%d-%H-%M-%S")
 

@@ -580,3 +580,33 @@ def maybe_compute_generative_loss(model_out):
         token_logits = model_out["logits"]
         token_labels = model_out["labels"]
         return F.cross_entropy(token_logits.permute(0, 2, 1), token_labels)
+
+
+def profile_train(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=None):
+    device = torch.device(args.device)
+    cast_dtype = get_cast_dtype(args.precision)
+    model.train()
+
+    data['train'].set_epoch(epoch)  # set epoch in process safe manner via sampler or shared_epoch
+    dataloader = data['train'].dataloader
+    for i, batch in enumerate(dataloader):
+        first_batch = batch
+        break
+    with profile(
+        schedule=torch.profiler.schedule(wait=1, warmup=5, active=1, repeat=2),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler("/home/chlience/flexpipe/models/open_clip/profile_log/pipeclip"),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+    ) as prof:
+        with torch.no_grad():
+            for i, batch in enumerate(dataloader):
+                if i >= (1 + 5 + 1) * 2:
+                    break
+                images, texts = first_batch
+                images = images.to(device=device, dtype=cast_dtype, non_blocking=True)
+                texts = texts.to(device=device, non_blocking=True)
+                optimizer.zero_grad()
+
+                loss = model.layers_forward_with_loss(images, texts)
+                prof.step()

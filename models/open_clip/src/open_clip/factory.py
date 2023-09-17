@@ -185,18 +185,20 @@ def create_model(
         is_hf_model = 'hf_model_name' in model_cfg.get('text_cfg', {})
         custom_text = model_cfg.pop('custom_text', False) or force_custom_text or is_hf_model
 
-        if custom_text:
-            if is_hf_model:
-                model_cfg['text_cfg']['hf_model_pretrained'] = pretrained_hf
-            if "coca" in model_name:
-                model = CoCa(**model_cfg, cast_dtype=cast_dtype)
-            else:
-                model = CustomTextCLIP(**model_cfg, cast_dtype=cast_dtype)
-        else:
-            if args.enable_flexpipe:
-                model = PipelineCLIP(**model_cfg, cast_dtype=cast_dtype, args=args)
-            else:
-                model = CLIP(**model_cfg, cast_dtype=cast_dtype)
+        # if custom_text:
+        #     if is_hf_model:
+        #         model_cfg['text_cfg']['hf_model_pretrained'] = pretrained_hf
+        #     if "coca" in model_name:
+        #         model = CoCa(**model_cfg, cast_dtype=cast_dtype)
+        #     else:
+        #         model = CustomTextCLIP(**model_cfg, cast_dtype=cast_dtype)
+        # else:
+        #     if args.enable_flexpipe:
+        #         model = PipelineCLIP(**model_cfg, cast_dtype=cast_dtype, args=args)
+        #     else:
+        #         model = CLIP(**model_cfg, cast_dtype=cast_dtype)
+
+        model = PipelineCLIP(**model_cfg, cast_dtype=cast_dtype, args=args)
 
         pretrained_loaded = False
         if pretrained:

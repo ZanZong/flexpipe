@@ -16,34 +16,17 @@ def get_python_function_event(data):
     return python_function_event
 
 
-# module -> vit_0 -> forward -> transformer_0 -> forward
-# 规定模型样式后，修改为寻找特定 flag 的版本
+def find_root(events):
+    for event in events:
+        if event["name"].split(" ")[-1] == "layers_forward_with_loss":
+            return event
+
+
 def find_layers(root):
     layers = []
     for son in root["son"]:
-        if "name" in son and son["name"].split(" ")[-1] == "ViT_0":
-            root = son
-            break
-
-    for son in root["son"]:
-        if "name" in son and son["name"].split(" ")[-1] == "forward":
-            root = son
-            break
-
-    for son in root["son"]:
-        if "name" in son and son["name"].split(" ")[-1] == "Transformer_0":
-            root = son
-            break
-
-    for son in root["son"]:
-        if "name" in son and son["name"].split(" ")[-1] == "forward":
-            root = son
-            break
-
-    for son in root["son"]:
         if "name" in son and son["name"].split(" ")[0] == "nn.Module:":
             layers.append(son)
-
     return layers
 
 
@@ -64,7 +47,9 @@ if __name__ == "__main__":
 
     python_function_event = get_python_function_event(data)
 
-    layers = find_layers(python_function_event[0])
+    root = find_root(python_function_event)
+
+    layers = find_layers(root)
 
     for layer in layers:
         print(layer["name"] + ": " + str(layer["dur"]) + "us")
