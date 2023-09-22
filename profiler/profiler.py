@@ -68,12 +68,15 @@ if __name__ == "__main__":
     layers = find_layers(root)
 
     for layer in layers:
+        # 认为时间区间为 [layer["ts"], layer["ts"] + layer["dur"]]
+        # 按理说右侧应该为开区间，但是只有闭区间才能在 no_grad 下保证 activation = 0
         layer["alloc_before"] = python_momory_events[
             bisect.bisect_left(python_momory_events_ts, layer["ts"]) - 1
         ]["args"]["Total Allocated"]
         layer["alloc_after"] = python_momory_events[
             bisect.bisect_right(python_momory_events_ts, layer["ts"] + layer["dur"])
         ]["args"]["Total Allocated"]
+        layer["activation"] = layer["alloc_after"] - layer["alloc_before"]
 
         print(
             layer["name"]
@@ -81,7 +84,12 @@ if __name__ == "__main__":
             + str(layer["dur"])
             + "us"
             + ", "
-            + str(layer["alloc_before"])
+            + str(layer["alloc_before"] / 1024 / 1024)
+            + "MB"
             + " "
-            + str(layer["alloc_after"])
+            + str(layer["alloc_after"] / 1024 / 1024)
+            + "MB"
+            + " "
+            + str(layer["activation"] / 1024 / 1024)
+            + "MB"
         )
