@@ -2,9 +2,21 @@ from pty import slave_open
 import torch
 import time
 import copy
-
+import gc
 
 _GLOBAL_TIMERS = None
+
+def see_memory_usage(message):
+
+    # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
+    gc.collect()
+
+    print(f"{message} MA {round(torch.cuda.memory_allocated() / (1024 * 1024 * 1024),2 )} GB \
+        Max_MA {round(torch.cuda.max_memory_allocated() / (1024 * 1024 * 1024),2)} GB")
+
+    # get the peak memory to report correct data, so reset the counter for the next call
+    if hasattr(torch.cuda, "reset_peak_memory_stats"):  # pytorch 1.4+
+        torch.cuda.reset_peak_memory_stats()
 
 def print_rank_0(message):
     """If distributed is initialized, print only on rank 0."""

@@ -94,7 +94,8 @@ class GeneralCorpusDataset(Dataset):
             ann_files = {
 
                 "train": os.path.join(cfg.DATALOADER.ANNO_FOLDER, "bookswiki.doc") if comm.get_world_size() > 1 else
-                os.path.join(cfg.DATALOADER.ANNO_FOLDER, "bookswiki-1000.doc"),
+                os.path.join(cfg.DATALOADER.ANNO_FOLDER, "bookswiki_doc"),
+                
                 "val": os.path.join(cfg.DATALOADER.ANNO_FOLDER, "bookswiki-1000.doc")
             }
 
@@ -150,6 +151,7 @@ class GeneralCorpusDataset(Dataset):
             cache_filename = 'cache_v3/cache_block_books_wiki_openweb'  + "_" + str(self.cache_local_rank) + "_" + str(self.cache_local_size) + '.pkl'
         else:
             cache_filename = 'cache_block' + os.path.basename(self.ann_file).replace('.', "_") + "_" + str(self.cache_local_rank) + "_" + str(self.cache_local_size) + '.pkl'
+        print(f"cache_filename for single proc={cache_filename}")
         cache_file = os.path.join(cache_path, cache_filename)
         if not os.path.exists(cache_file):
             if self.version == 'v3':

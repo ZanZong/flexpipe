@@ -24,7 +24,8 @@ from uniperceiver.utils import comm
 from .sampler import TrainingSampler, NaiveSampler
 from .moe_embeddings import get_moe_embedding, get_embed_with_task_type, get_embed_with_shared_tagert_name
 
-
+from ..utils.tprofiler import get_timers
+timers = get_timers()
 
 from functools import partial
 
@@ -35,7 +36,7 @@ Registry for datasets, i.e. the whole model
 
 from uniperceiver.datasets.unified_dataset import UnifiedDataset
 from .batch_sampler import WeightedBatchSampler
-
+import time
 
 def build_dataset_mapper(cfg, name, stage):
     dataset_mapper = DATASETS_REGISTRY.get(name)(cfg, stage)
@@ -45,7 +46,10 @@ def trivial_batch_collator(batch):
     return batch
 
 def preprocess_batch_collator(batched_inputs, cfg=dict(), shared_targets=dict()):
-
+    # torch.cuda.synchronize()
+    # timers("preprocess_sample").start()
+    print(f"preprocessing start, {time.time()}")
+    preprocess_sample_start = time.time()
     ret = {}
     if cfg.MOE.MOE:
         moe_type =  cfg.MOE.MOE_TYPE
@@ -111,12 +115,13 @@ def preprocess_batch_collator(batched_inputs, cfg=dict(), shared_targets=dict())
                 'moe_embedding':
                 get_embed_with_task_type(moe_type, batched_inputs[0]['task_info']['task_type'], data_type)
             })
-
-
+    preprocess_sample_end = time.time()
+    # timers("preprocess_sample").stop()
+    # timers("preprocess_target").start()
     # target sets
     num_target_sets = len(batched_inputs[0]['target_idx'])
     # change value to -1 for padding location
-    ret['target_idx_list'] = [ pad_tensor(tensor=[sample['target_idx'][i] for sample in batched_inputs], padding_value=-1, use_mask=False)   if isinstance(batched_inputs[0]['target_idx'][i], torch.Tensor) else torch.tensor([sample['target_idx'][i] for sample in batched_inputs] )  for i in range(num_target_sets) ]
+    ret['target_idx_list'] = [pad_tensor(tensor=[sample['target_idx'][i] for sample in batched_inputs], padding_value=-1, use_mask=False)   if isinstance(batched_inputs[0]['target_idx'][i], torch.Tensor) else torch.tensor([sample['target_idx'][i] for sample in batched_inputs] )  for i in range(num_target_sets) ]
     ret['target_set_list'] = [batched_inputs[0]['target_set'][i] for i in range(num_target_sets)]
 
     # shared target sets
@@ -144,7 +149,10 @@ def preprocess_batch_collator(batched_inputs, cfg=dict(), shared_targets=dict())
     ret['task_info'] = batched_inputs[0]['task_info'] # should task_name be put into task_info?
 
     ret['task_info']['task_name'] = batched_inputs[0].get('task_name', None)
-
+    
+    # timers("preprocess_target").stop()
+    preprocess_target_end = time.time()
+    print(f"preprocessing end, {time.time()}")
 
     return ret
 
@@ -209,6 +217,7 @@ def build_unified_train_loader(cfg, task_cfg, model=None):
     dataset = UnifiedDataset(cfg, task_cfg, stage="train")
     batchsampler = WeightedBatchSampler(dataset, cfg, task_cfg)
     shared_targets = load_shared_targets(cfg)
+    print(f"create dataloader: num_workers={cfg.DATALOADER.NUM_WORKERS}, pin_memory={cfg.DATALOADER.PIN_MEM}")
     dataloader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_sampler=batchsampler,
@@ -221,8 +230,6 @@ def build_unified_train_loader(cfg, task_cfg, model=None):
         # drop_last=True,
         prefetch_factor=cfg.DATALOADER.PREFETCH_FACTOR, # default: 2
         persistent_workers=cfg.DATALOADER.NUM_WORKERS>0)
-
-
     return dataloader
 
 

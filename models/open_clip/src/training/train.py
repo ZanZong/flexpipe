@@ -64,10 +64,9 @@ def backward(total_loss, scaler):
 def train_one_epoch_deepspeed_pipeline(engine, data, epoch, args):
     data['train'].set_epoch(epoch)  # set epoch in process safe manner via sampler or shared_epoch
     dataloader = data['train'].dataloader
-    args.accum_freq = engine._config.gradient_accumulation_steps
+    # args.accum_freq = engine._config.gradient_accumulation_steps
     dataloader = deepspeed.utils.RepeatingLoader(dataloader)
     data_iterator = iter(dataloader)
-
     def trace_handler(p):
         # output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10)
         # print_rank_0(output)

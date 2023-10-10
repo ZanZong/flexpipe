@@ -482,8 +482,11 @@ class ImageTextPairDataset(Dataset):
         return ['image', 'im_info', 'text', 'mlm_labels']
 
     def __getitem__(self, index):
+        index = 39 # a mock
+        # print(f"image_text_pair index={index}")
         for i_try in range(100):
             try:
+                load_start = time.time()
                 image_path = None
                 image_id = None
                 idb = None
@@ -506,6 +509,8 @@ class ImageTextPairDataset(Dataset):
                         idb['title'] = [_idb[2].as_py()]
                         idb['description'] = [_idb[3].as_py()]
                 # print(f"image_path={image_path}, index={index}, as_numpy_as_possible={self.as_numpy_as_possible}, image_path={image_path}, image_id={image_id}, random_caption={self.random_caption}")
+                load_stop = time.time()
+                # print(f"load data cost {load_stop - load_start}s")
                 return self._data_transform(idb, index=index, as_numpy_as_possible=self.as_numpy_as_possible, image_path=image_path, image_id=image_id)
             except Exception as e:
                 print(
@@ -519,7 +524,7 @@ class ImageTextPairDataset(Dataset):
                 continue
 
     def _data_transform(self, idb, index=None, as_numpy_as_possible=False, fail_image_fill=(0.0, 0.0, 0.0), image_path=None, image_id=None):
-
+        # transform_start = time.time()
         if self.dataset_name in ['VG', 'MSCOCO', 'FLICKR']:
             image = self._load_image(image_path)
         else:
@@ -667,7 +672,8 @@ class ImageTextPairDataset(Dataset):
         if as_numpy_as_possible:
             text = np.array(text)
             mlm_labels = np.array(mlm_labels)
-
+        transform_end = time.time()
+        # print(f"transform cost {transform_end - transform_start}s")
         return self.package_item(ret, text, mlm_labels, u_mask_type)
 
 

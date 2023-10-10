@@ -342,6 +342,12 @@ def main(args):
             logging.info(f"=> loaded checkpoint '{args.resume}' (epoch {start_epoch})")
 
     # initialize datasets
+    if args.enable_deepspeed:
+        from deepspeed.runtime.config import DeepSpeedConfig        
+        _config = DeepSpeedConfig(args.deepspeed_config)
+        args.accum_freq = _config.gradient_accumulation_steps
+        args.batch_size = _config.train_micro_batch_size_per_gpu
+        args.workers = 4
     data = get_data(args, (preprocess_train, preprocess_val), epoch=start_epoch, tokenizer=get_tokenizer(args.model))
     assert len(data), 'At least one train or eval dataset must be specified.'
 
@@ -416,12 +422,14 @@ def main(args):
     elif args.enable_flexpipe:
         import networkx as nx
         from deepspeed.pipe import PipelineBranchModule
-        g = nx.DiGraph(nx.nx_pydot.read_dot(f'/home/zanzong/workspace/open_clip/ds_configs/layerinfo_{args.model}.dot'))
-        
+        g = nx.DiGraph(nx.nx_pydot.read_dot(f'/home/zanzong/workspace/flexpipe/models/open_clip/ds_configs/layerinfo_{args.model}.dot'))
+        timeline_path = "/home/zanzong/workspace/flexpipe/models/open_clip/timelines/"
         # use PipelineBranchModule will automatically choose BranchEngine
         # ViT-B-32 split=[0, 11, 29]
+        # ViT-L-16-bigT=[0, 15, 53]
+        # ViT-H-16=[0, 20, 61]
         model = PipelineBranchModule(layers=model.to_layers(), graph_info=g, see_baseline_perf=args.baseline_perf, \
-                                        is_constrastive_loss=True, partition_method=[0, 15, 53], num_stages=2)
+                        is_constrastive_loss=True, timeline_path=None, partition_method=[0, 20, 61], num_stages=2)
     
         # init deepspeed
         engine, _, _, _ = deepspeed.initialize(
@@ -432,6 +440,7 @@ def main(args):
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):
             logging.info(f'Start epoch {epoch}')
+        print(f"\n\n current device: {torch.cuda.get_device_name()} \n\n")
         if args.enable_deepspeed and not args.enable_flexpipe:
             train_one_epoch_deepspeed(engine, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
         elif args.enable_flexpipe:

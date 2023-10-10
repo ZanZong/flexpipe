@@ -869,7 +869,7 @@ class ClipLoss(nn.Module):
         return labels
 
     def get_logits(self, image_features, text_features, logit_scale):    
-        self.world_size = 1 # TODO: for pure 2-stage pipeline
+        self.world_size = 1 # Ablation study about performance influence of all_gather
         if self.world_size > 1:
             all_image_features, all_text_features = gather_features(
                 image_features, text_features,
@@ -884,7 +884,6 @@ class ClipLoss(nn.Module):
         else:
             logits_per_image = logit_scale * image_features @ text_features.T
             logits_per_text = logit_scale * text_features @ image_features.T
-        
         return logits_per_image, logits_per_text
 
     def forward(self, inputs):

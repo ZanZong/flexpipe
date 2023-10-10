@@ -8,7 +8,7 @@ import torch.utils.data as data
 import torch.nn.functional as F
 from torchvision.transforms import Compose, RandomApply, ToTensor, Normalize, CenterCrop, Lambda, RandomHorizontalFlip, ColorJitter, Resize, RandomCrop
 import json
-# import av
+import av
 from torchvision.transforms.transforms import RandomResizedCrop
 from uniperceiver.tokenization import  ClipTokenizer
 from uniperceiver.config import  configurable
@@ -20,6 +20,7 @@ from uniperceiver.utils import comm
 import copy
 
 import io
+import time
 
 __all__ = ["VideoDataSet", "random_clip"]
 
@@ -229,7 +230,7 @@ class VideoDataSet(data.Dataset):
         self.class_names = list()
         with open(self.category_file, 'r') as f:
             for line in f.readlines():
-                class_name, idx = line.strip().split('\t')
+                class_name, idx = line.strip().split(',')
                 # for annotations
                 class_name = class_name.replace(" ", "_") #  replace(" ", "_") for kinetics dataset
                 self.cls2idx[class_name] = int(idx)
@@ -272,7 +273,9 @@ class VideoDataSet(data.Dataset):
                     # if not self.test_mode:
                     label = info['annotations']['label']
                     inst["target_label"] = label
-                    assert label in self.cls2idx
+                    # assert label in self.cls2idx
+                    if label not in self.cls2idx:
+                        continue
                     video_list.append(inst)
 
         if self.is_train and self.data_percentage < 1.0:
@@ -320,7 +323,8 @@ class VideoDataSet(data.Dataset):
 
     def __getitem__(self, index):
         for i_try in range(100):
-            try:
+            start_t = time.time()
+            try:   
                 record = self.video_list[index].as_py()
                 if self.use_ceph:
                     container = av.open(io.BytesIO(self.tcs_loader.client.get(record["video_path"])))
@@ -418,7 +422,7 @@ class VideoDataSet(data.Dataset):
                 'task_info':  copy.deepcopy(self.task_info)
 
             }
-
+            # print(f"Get index={index} of dataset, try {i_try}, spend t={time.time()-start_t}s.")
             # dict_as_tensor(ret)
             return ret
 

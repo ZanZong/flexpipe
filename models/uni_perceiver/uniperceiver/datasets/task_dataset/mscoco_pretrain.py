@@ -17,6 +17,7 @@ from collections import defaultdict
 from uniperceiver.datasets.custom_transforms import clip_transforms
 import pyarrow as pa
 from uniperceiver.utils import comm
+import time
 
 __all__ = ["ImageTextPairDataset"]
 
@@ -304,8 +305,10 @@ class ImageTextPairDataset:
 
     # def __call__(self, dataset_dict):
     def __getitem__(self, index):
+        print(f"mscoco get index={index}")
         for i_try in range(100):
             try:
+                start_load = time.time()
                 dataset_dict = self.database[index].as_py()
                 image_id = dataset_dict['image_id']
                 image_split = self.idx2name[int(image_id)]['split']
@@ -319,8 +322,9 @@ class ImageTextPairDataset:
 
                 else:
                     img = Image.open(image_path).convert("RGB")
-                
-                break  
+                end_load = time.time()
+                print(f"finish {i_try} try, cost {end_load - start_load}s.")
+                break
             except Exception as e:
                 print("Failed to load image from idb {} with error {} ; trial {};".format(self.database[index], e, i_try))
                 index = (index + 1) % len(self.database)
@@ -328,8 +332,7 @@ class ImageTextPairDataset:
                     index = (index + 1) % len(self.database)
                 continue
 
-
-
+        pp_start = time.time()
         img = self.transform(img)
 
         ret = {
@@ -482,5 +485,6 @@ class ImageTextPairDataset:
             raise NotImplementedError
 
         dict_as_tensor(ret)
-
+        pp_stop = time.time()
+        print(f"preprocess after load cost {pp_stop - pp_start}s.")
         return ret

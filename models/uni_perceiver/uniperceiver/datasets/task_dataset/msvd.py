@@ -12,7 +12,7 @@ from torchvision.transforms import Compose, RandomApply, ToTensor, Normalize, Ce
 from .video_transform import random_short_side_scale_jitter, uniform_crop
 import json
 from io import BytesIO
-# import av
+import av
 from .video_raw import VideoDataSet
 import io
 from collections import defaultdict
@@ -20,6 +20,8 @@ from collections import defaultdict
 import pyarrow as pa
 from uniperceiver.utils import comm
 import copy
+import time
+import functools
 
 __all__ = ["MSVDDataset"]
 
@@ -171,7 +173,8 @@ class MSVDDataset(VideoDataSet):
         else:
             assert stage == "test"
             ann_file = os.path.join(cfg.DATALOADER.ANNO_FOLDER, "caption_msvd_{}_cocostyle.json".format(stage))
-        feat_path = os.path.join(cfg.DATALOADER.FEATS_FOLDER, "MSVD_ResNet152_{}.hdf5".format(stage))
+        # feat_path = os.path.join(cfg.DATALOADER.FEATS_FOLDER, "MSVD_ResNet152_{}.hdf5".format(stage))
+        feat_path = cfg.DATALOADER.FEATS_FOLDER
 
         if 'SLURM_PROCID' in os.environ:
             tcs_conf_path = cfg.DATALOADER.get("TCS_CONF_PATH", "slurm_tools/petreloss.config")
@@ -378,10 +381,11 @@ class MSVDDataset(VideoDataSet):
 
         return output_tokens, output_label
 
-
+    @functools.lru_cache()
     def __getitem__(self, idx):
         
         for i_try in range(100):
+            start_t = time.time()
             try:
                 record = self.video_list[idx].as_py()
                 record = copy.deepcopy(record)
@@ -393,7 +397,6 @@ class MSVDDataset(VideoDataSet):
                     container = av.open(io.BytesIO(self.tcs_loader.client.get(video_path)))
                 else:
                     container = av.open(video_path)
-
 
                 # container.streams.video[0].thread_type = "AUTO"
                 stream = container.streams.video[0]
@@ -418,7 +421,10 @@ class MSVDDataset(VideoDataSet):
                 index = random.randint(0, len(self.data_list) - 1)
                 record = self.data_list[index]
                 continue
-
+            
+            proc_indexing = time.time()
+            dur_load = proc_indexing - start_t
+            
             if self.stage=='train':
                 indices = [self._sample_indices(total_frames, fps)]
             else:
@@ -434,7 +440,9 @@ class MSVDDataset(VideoDataSet):
             images = dict()
 
             fetched = 0
-
+            proc_video_decoding = time.time()
+            dur_video_indexing = proc_video_decoding - proc_indexing
+            
             for frame in container.decode(stream):
                 if frame.index not in all_index or frame.index in images:
                     continue
@@ -446,6 +454,8 @@ class MSVDDataset(VideoDataSet):
 
             container.close()
 
+            video_catting = time.time()
+            dur_video_encoding = video_catting - proc_video_decoding
             video_data = list()
             for ind in indices:
                 seq = list()
@@ -459,7 +469,8 @@ class MSVDDataset(VideoDataSet):
 
             if video_data.dim() == 4:
                 video_data.unsqueeze_(0) # in case there is only one frame
-
+            video_finish = time.time()
+            dur_video_cat = video_finish - video_catting
             ret = {
                 'input_sample': [{
                     'data': video_data, 'invalid_mask': None, 'modality': 'video', 'data_type': 'input',
@@ -471,7 +482,7 @@ class MSVDDataset(VideoDataSet):
                         }
                 }]
             }
-
+            caption_tokenize = time.time()
             if self.stage == 'train' and record['caption'] is not None:
                 caption = record['caption']
                 caption = caption + " <|endoftext|>"
@@ -588,6 +599,8 @@ class MSVDDataset(VideoDataSet):
                 raise NotImplementedError
 
 
-
+            caption_done = time.time()
+            dur_caption_tok = caption_done - caption_tokenize
+            # print(f"video read={dur_load}, indexing={dur_video_indexing}, video_decode={dur_video_encoding}, video_cat={dur_video_cat}, caption_tokenize={dur_caption_tok}")
             dict_as_tensor(ret)
             return ret

@@ -18,12 +18,10 @@ exec python -u src/training/main.py \
     --train-data="/mnt/zoltan/zanzong/CC3M/cc3m/{00000..00331}.tar" \
     --train-num-samples 3000000 \
     --epochs=1 \
-    --model ViT-L-16-bigT \
-    --name "ViT-L-16-bigT-"$TIMESTAMP \
+    --model ViT-H-16 \
+    --name "ViT-H-16-"$TIMESTAMP \
     --seed 0 \
     --force-patch-dropout 0. \
     --gather-with-grad \
-    --local-loss \
     --enable-deepspeed \
-    --enable-flexpipe \
-    --baseline-perf
+    --enable-flexpipe

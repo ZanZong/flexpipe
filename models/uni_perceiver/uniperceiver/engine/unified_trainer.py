@@ -59,7 +59,7 @@ except:
     print('apex has not been installed.')
     APEX_INSTALLED = False
 
-from ..utils.tprofiler import get_timers, print_rank_0
+from ..utils.tprofiler import get_timers, print_rank_0, see_memory_usage
 timers = get_timers()
 
 __all__ = ['UnifiedTrainer']
@@ -437,7 +437,9 @@ class UnifiedTrainer(TrainerBase):
         torch.cuda.synchronize()
 
         start = timer_fn()
+        timers("gen_data").start()
         data = get_batch_data(self.cfg, self._train_data_loader_iter, self.train_data_loader)
+        timers("gen_data").stop()
         data_time = time.perf_counter() - start
 
         task = data['task_info']['task_name']
@@ -507,6 +509,7 @@ class UnifiedTrainer(TrainerBase):
         if self.model_ema is not None:
             self.model_ema.update(self.model)
         torch.cuda.synchronize()
+        # see_memory_usage(f"rank={comm.get_rank()}, memory after batch:")
 
     def cast_layers(self):
         logger = self.logger
