@@ -455,29 +455,44 @@ def main():
 
     # Start training!
     ddp_model.train()
+    from torch.profiler import profile
 
-    for epoch in range(resume_from_epoch, args.num_epochs):
-        laion_dataset.set_epoch(epoch)
-        laion_loader = laion_dataset.dataloader
-        mmc4_dataset.set_epoch(epoch)
-        mmc4_loader = mmc4_dataset.dataloader
+    with profile(
+        schedule=torch.profiler.schedule(wait=1, warmup=5, active=2, repeat=2),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(
+            "/home/chlience/flexpipe/models/open_flamingo/profile_log/pipeflamigo"
+        ),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+    ) as prof:
+        for epoch in range(resume_from_epoch, args.num_epochs):
+            if epoch >= (1 + 5 + 2) * 2:
+                break
+            print(f"Epoch {epoch}")
+            laion_dataset.set_epoch(epoch)
+            laion_loader = laion_dataset.dataloader
+            mmc4_dataset.set_epoch(epoch)
+            mmc4_loader = mmc4_dataset.dataloader
 
-        train_one_epoch(
-            args=args,
-            model=ddp_model,
-            epoch=epoch,
-            tokenizer=tokenizer,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-            laion_loader=laion_loader,
-            mmc4_loader=mmc4_loader,
-            device_id=device_id,
-            wandb=wandb,
-        )
-        save_checkpoint(ddp_model, optimizer, lr_scheduler, epoch, args)
+            train_one_epoch(
+                args=args,
+                model=ddp_model,
+                epoch=epoch,
+                tokenizer=tokenizer,
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                laion_loader=laion_loader,
+                mmc4_loader=mmc4_loader,
+                device_id=device_id,
+                wandb=wandb,
+            )
+            # save_checkpoint(ddp_model, optimizer, lr_scheduler, epoch, args)
+            prof.step()
+            
 
     # save final checkpoint
-    save_checkpoint(ddp_model, optimizer, lr_scheduler, epoch, args)
+    # save_checkpoint(ddp_model, optimizer, lr_scheduler, epoch, args)
 
 
 if __name__ == "__main__":
