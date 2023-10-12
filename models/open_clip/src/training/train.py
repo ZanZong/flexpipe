@@ -599,10 +599,19 @@ def profile_train(model, data, loss, epoch, optimizer, scaler, scheduler, dist_m
         profile_memory=True,
         with_stack=True,
     ) as prof:
-        with torch.no_grad():
-            for i, batch in enumerate(dataloader):
-                if i >= (1 + 5 + 1) * 2:
-                    break
+        for i, batch in enumerate(dataloader):
+            if i >= (1 + 5 + 1) * 2:
+                break
+            if (i != 13):
+                with torch.no_grad():
+                    images, texts = first_batch
+                    images = images.to(device=device, dtype=cast_dtype, non_blocking=True)
+                    texts = texts.to(device=device, non_blocking=True)
+                    optimizer.zero_grad()
+
+                    loss = model.layers_forward_with_loss(images, texts)
+                    prof.step()
+            else:
                 images, texts = first_batch
                 images = images.to(device=device, dtype=cast_dtype, non_blocking=True)
                 texts = texts.to(device=device, non_blocking=True)
